@@ -40,4 +40,32 @@ describe('ACME Portal', () => {
     expect(res.status).toBe(201);
     expect(res.body.ticketId).toMatch(/^T-/);
   });
+
+  test('invitació duplicada retorna 409 amb el mateix token', async () => {
+    const email = `dup-${Date.now()}@t.com`;
+    const first = await request(app)
+      .post('/api/invitations')
+      .set(auth)
+      .send({ email });
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post('/api/invitations')
+      .set(auth)
+      .send({ email });
+    expect(second.status).toBe(409);
+    expect(second.body.token).toBe(first.body.token);
+  });
+
+  test('dos POST paral·lels amb el mateix email no creen dos tokens', async () => {
+    const email = `race-${Date.now()}@t.com`;
+    const [a, b] = await Promise.all([
+      request(app).post('/api/invitations').set(auth).send({ email }),
+      request(app).post('/api/invitations').set(auth).send({ email }),
+    ]);
+
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([201, 409]);
+    expect(a.body.token).toBe(b.body.token);
+  });
 });
