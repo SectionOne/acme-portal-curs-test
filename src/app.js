@@ -43,8 +43,7 @@ function createApp() {
 
   /**
    * Invitacions.
-   * BUG DE CURSA: si es crida dues vegades molt ràpid amb el mateix email,
-   * es poden crear dos tokens (no hi ha bloqueig / comprovació atòmica).
+   * Un sol token per email: la comprovació és just abans del set (sense await entremig).
    */
   app.post('/api/invitations', requireAuth, async (req, res) => {
     const email = (req.body && req.body.email) || '';
@@ -54,13 +53,19 @@ function createApp() {
 
     // Simula latència de xarxa / BD
     await delay(150);
+    await delay(150);
 
+    // Comprovació atòmica respecte a altres handlers (Node single-thread):
+    // sense await entre has/get i set no hi ha finestra de cursa.
     if (invitations.has(email)) {
-      // En un fix correcte, aquí retornaríem 409 o el mateix token de forma segura.
-      // Ara mateix encara hi ha una finestra de cursa abans del .has (lab unitat 10 / 02).
+      const existing = invitations.get(email);
+      return res.status(409).json({
+        error: 'Ja existeix una invitació per a aquest email',
+        email,
+        token: existing.token,
+      });
     }
 
-    await delay(150);
     const token = `inv_${Math.random().toString(36).slice(2)}_${Date.now()}`;
     invitations.set(email, { token, createdAt: Date.now() });
 
